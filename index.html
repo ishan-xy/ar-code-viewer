@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>AR Model Viewer</title>
+	<script type="module" src="https://cdnjs.cloudflare.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+		}
+		
+		#modelViewer {
+			width: 100vw;
+			height: 100vh;
+		}
+		
+		.ar-prompt {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			background: rgba(0, 0, 0, 0.8);
+			color: white;
+			padding: 20px;
+			border-radius: 10px;
+			text-align: center;
+			z-index: 1000;
+			display: none;
+		}
+		
+		.ar-button {
+			background: #007AFF;
+			color: white;
+			border: none;
+			padding: 15px 30px;
+			border-radius: 25px;
+			font-size: 18px;
+			font-weight: 600;
+			cursor: pointer;
+			margin-top: 15px;
+			transition: all 0.3s ease;
+		}
+		
+		.ar-button:hover {
+			background: #0056CC;
+			transform: scale(1.05);
+		}
+		
+		.loading {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			color: #666;
+			font-size: 18px;
+			z-index: 100;
+		}
+	</style>
+</head>
+<body>
+	<div class="loading" id="loading">Loading 3D Model...</div>
+	
+	<div class="ar-prompt" id="arPrompt">
+		<div>📱 Ready for AR!</div>
+		<div style="margin: 10px 0; font-size: 14px;">Tap below to view the model in your space</div>
+		<button class="ar-button" id="arButton">Launch AR</button>
+	</div>
+
+	<model-viewer
+		id="modelViewer"
+		camera-controls
+		ar
+		ar-modes="webxr scene-viewer quick-look"
+		autoplay
+		auto-rotate
+		interaction-prompt="none"
+		style="width: 100vw; height: 100vh;"
+	></model-viewer>
+
+	<script>
+		const param = location.pathname.slice(1);
+		const baseUrl = "https://telescope-violations-gospel-afraid.trycloudflare.com";
+		const modelViewer = document.getElementById("modelViewer");
+		const loading = document.getElementById("loading");
+		const arPrompt = document.getElementById("arPrompt");
+		const arButton = document.getElementById("arButton");
+		
+		// Function to detect if device supports AR
+		function isMobileDevice() {
+			return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+		}
+		
+		// Function to activate AR
+		function activateAR() {
+			if (modelViewer.canActivateAR) {
+				modelViewer.activateAR();
+			}
+		}
+		
+		if (param) {
+			modelViewer.src = `${baseUrl}/model/files/${param}`;
+			// modelViewer.src = 'C:/Users/ishan/Downloads/Compressed/iPhone16Teal.usdz';
+			// Handle model load
+			modelViewer.addEventListener('load', () => {
+				loading.style.display = 'none';
+				
+				// Check if AR is supported and device is mobile
+				if (isMobileDevice() && modelViewer.canActivateAR) {
+					// On mobile, show AR prompt automatically
+					setTimeout(() => {
+						arPrompt.style.display = 'block';
+					}, 1000);
+				}
+			});
+			
+			// Handle AR button click
+			arButton.addEventListener('click', () => {
+				arPrompt.style.display = 'none';
+				activateAR();
+			});
+			
+			// Auto-activate AR on mobile after model loads (alternative approach)
+			modelViewer.addEventListener('load', () => {
+				if (isMobileDevice()) {
+					// Try to activate AR automatically after a short delay
+					setTimeout(() => {
+						if (modelViewer.canActivateAR) {
+							// Show prompt first, then activate on user interaction
+							arPrompt.style.display = 'block';
+						}
+					}, 2000);
+				}
+			});
+			
+			// Handle AR status changes
+			modelViewer.addEventListener('ar-status', (event) => {
+				console.log('AR Status:', event.detail.status);
+				if (event.detail.status === 'session-started') {
+					arPrompt.style.display = 'none';
+				}
+			});
+			
+			// Handle errors
+			modelViewer.addEventListener('error', (event) => {
+				loading.innerHTML = 'Failed to load model';
+				console.error('Model loading error:', event);
+			});
+		}
+		
+		// Alternative: Try to activate AR when user touches the screen
+		let hasTriedAR = false;
+		document.addEventListener('touchstart', () => {
+			if (!hasTriedAR && modelViewer.canActivateAR && isMobileDevice()) {
+				hasTriedAR = true;
+				setTimeout(() => {
+					activateAR();
+				}, 500);
+			}
+		});
+	</script>
+</body>
+</html>
