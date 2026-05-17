@@ -9,70 +9,104 @@
 		body {
 			margin: 0;
 			padding: 0;
+			background: #0d1117;
 			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 		}
 
-		#modelViewer {
+		model-viewer {
 			width: 100vw;
 			height: 100vh;
+			--poster-color: #0d1117;
 		}
 
-		.ar-prompt {
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			background: rgba(0, 0, 0, 0.8);
-			color: white;
-			padding: 20px;
-			border-radius: 10px;
-			text-align: center;
-			z-index: 1000;
+		#overlay {
+			position: fixed;
+			inset: 0;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 12px;
+			pointer-events: none;
+			z-index: 10;
+		}
+
+		#statusText {
+			color: #8899bb;
+			font-size: 15px;
+			font-family: 'Space Mono', monospace, monospace;
+			letter-spacing: 0.05em;
+		}
+
+		#arPrompt {
 			display: none;
+			flex-direction: column;
+			align-items: center;
+			gap: 10px;
+			pointer-events: all;
 		}
 
-		.ar-button {
-			background: #007AFF;
-			color: white;
+		#arPrompt p {
+			color: #8899bb;
+			font-size: 13px;
+			margin: 0;
+		}
+
+		#arButton {
+			background: #00d4ff;
+			color: #070a0f;
 			border: none;
-			padding: 15px 30px;
+			padding: 14px 32px;
 			border-radius: 25px;
-			font-size: 18px;
-			font-weight: 600;
+			font-size: 16px;
+			font-weight: 700;
 			cursor: pointer;
-			margin-top: 15px;
-			transition: all 0.3s ease;
+			letter-spacing: 0.05em;
+			transition: box-shadow 0.2s, transform 0.2s;
 		}
 
-		.ar-button:hover {
-			background: #0056CC;
-			transform: scale(1.05);
+		#arButton:hover {
+			box-shadow: 0 4px 20px rgba(0, 212, 255, 0.4);
+			transform: translateY(-1px);
 		}
 
-		.loading {
-			position: absolute;
-			top: 50%;
+		/* iOS-only banner: shown when no USDZ is available */
+		#iosBanner {
+			display: none;
+			position: fixed;
+			bottom: 24px;
 			left: 50%;
-			transform: translate(-50%, -50%);
-			color: #666;
-			font-size: 18px;
-			z-index: 100;
+			transform: translateX(-50%);
+			background: rgba(255, 170, 0, 0.12);
+			border: 1px solid rgba(255, 170, 0, 0.35);
+			border-radius: 10px;
+			padding: 12px 20px;
+			color: #ffaa00;
+			font-size: 13px;
+			text-align: center;
+			max-width: 320px;
+			z-index: 20;
+			line-height: 1.5;
 		}
 	</style>
 </head>
 <body>
-	<div class="loading" id="loading">Loading 3D Model...</div>
+	<div id="overlay">
+		<span id="statusText">Loading 3D Model…</span>
+		<div id="arPrompt">
+			<p>Ready for AR — tap below to place in your space</p>
+			<button id="arButton">📱 Launch AR</button>
+		</div>
+	</div>
 
-	<div class="ar-prompt" id="arPrompt">
-		<div>📱 Ready for AR!</div>
-		<div style="margin: 10px 0; font-size: 14px;">Tap below to view the model in your space</div>
-		<button class="ar-button" id="arButton">Launch AR</button>
+	<div id="iosBanner">
+		⚠️ AR is not available on this iPhone/iPad — the owner has not uploaded a USDZ file.
 	</div>
 
 	<!--
-		ios-src is set dynamically after the metadata fetch below.
-		When set, model-viewer uses QuickLook on iOS/Safari automatically
-		instead of WebXR, giving the best native AR experience on Apple devices.
+		• src       → GLB, used on Android / desktop / WebXR
+		• ios-src   → USDZ, used by Safari Quick Look on iPhone/iPad
+		Both are set dynamically below after checking has_usdz from the metadata endpoint.
 	-->
 	<model-viewer
 		id="modelViewer"
@@ -81,72 +115,91 @@
 		ar-modes="webxr scene-viewer quick-look"
 		autoplay
 		auto-rotate
+		shadow-intensity="1"
 		interaction-prompt="none"
-		style="width: 100vw; height: 100vh;"
+		style="width:100vw; height:100vh;"
 	></model-viewer>
 
 	<script>
-		const param = location.pathname.slice(1); // e.g. "ab3c9x"
-		const baseUrl = "https://questionnaire-britain-adware-dirt.trycloudflare.com";
+		// Strip the leading slash to get the query token, e.g. "ab3c9x"
+		const query = location.pathname.slice(1);
+
+		// The AR viewer is deployed separately from the Go backend.
+		// BASE_URL is injected by server.js at runtime via a placeholder replacement,
+		// so this file never needs to be manually edited when the backend URL changes.
+		const baseUrl = "%%BASE_URL%%";
 
 		const modelViewer = document.getElementById("modelViewer");
-		const loading     = document.getElementById("loading");
+		const statusText  = document.getElementById("statusText");
 		const arPrompt    = document.getElementById("arPrompt");
 		const arButton    = document.getElementById("arButton");
+		const iosBanner   = document.getElementById("iosBanner");
 
-		function isMobileDevice() {
-			return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-		}
+		const isApple = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+		                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
-		function isAppleDevice() {
-			return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-			       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-		}
+		const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 		function activateAR() {
-			if (modelViewer.canActivateAR) {
-				modelViewer.activateAR();
-			}
+			if (modelViewer.canActivateAR) modelViewer.activateAR();
 		}
 
 		async function loadModel() {
-			if (!param) return;
+			if (!query) return;
 
-			// 1. Fetch metadata to get the ios_src URL (USDZ) if available
-			let iosSrc = null;
+			// ── 1. Fetch public model metadata ──────────────────────────────
+			// GET /model/files/:query would immediately redirect to the file.
+			// We need the metadata (has_usdz) first, so we hit the public
+			// metadata route exposed for the AR viewer: GET /ar/meta/:query
+			// (see routes.go suggestion below).
+			// If that route doesn't exist yet, fall back to has_usdz = false.
+			let hasUsdz = false;
 			try {
-				const metaResp = await fetch(`${baseUrl}/model/${param}`);
+				const metaResp = await fetch(`${baseUrl}/ar/meta/${query}`);
 				if (metaResp.ok) {
 					const meta = await metaResp.json();
-					// ios_src is an absolute path like "/model/files/ios/ab3c9x"
-					if (meta.ios_src) {
-						iosSrc = `${baseUrl}${meta.ios_src}`;
-					}
+					hasUsdz = !!meta.has_usdz;
 				}
 			} catch (e) {
-				console.warn("Could not fetch model metadata:", e);
+				console.warn("Metadata fetch failed, continuing without USDZ info:", e);
 			}
 
-			// 2. Set the GLB source (primary, works on Android & desktop)
-			modelViewer.src = `${baseUrl}/model/files/${param}`;
+			// ── 2. Set the GLB source (Android, desktop, WebXR) ─────────────
+			// The Go backend's GetModelRedirect already sniffs User-Agent and
+			// redirects Safari/iOS to the USDZ presigned URL automatically.
+			// We still set ios-src explicitly so model-viewer's Quick Look
+			// integration works even on browsers that don't follow the redirect.
+			modelViewer.src = `${baseUrl}/model/files/${query}`;
 
-			// 3. Set ios-src for QuickLook on Apple devices.
-			//    model-viewer uses this automatically on Safari/iOS; no extra JS needed.
-			if (iosSrc) {
-				modelViewer.setAttribute("ios-src", iosSrc);
+			// ── 3. Set ios-src for Apple Quick Look ─────────────────────────
+			// The backend serves USDZ from the same /model/files/:query URL for
+			// Safari user-agents, but model-viewer needs ios-src set to a URL
+			// that directly returns the .usdz file (Quick Look is picky).
+			// We point ios-src at a dedicated USDZ endpoint so there's no
+			// ambiguity. The backend should expose GET /model/files/usdz/:query
+			// that always returns the USDZ presigned redirect (see routes.go).
+			if (hasUsdz) {
+				modelViewer.setAttribute("ios-src", `${baseUrl}/model/files/usdz/${query}`);
+			} else if (isApple) {
+				// No USDZ uploaded — warn the iOS user.
+				iosBanner.style.display = "block";
 			}
 
-			// 4. Event listeners
+			// ── 4. Wire up model-viewer events ──────────────────────────────
 			modelViewer.addEventListener("load", () => {
-				loading.style.display = "none";
+				statusText.style.display = "none";
 
-				if (isMobileDevice() && modelViewer.canActivateAR) {
-					setTimeout(() => { arPrompt.style.display = "block"; }, 1000);
+				// Show the AR launch prompt on mobile after a short pause.
+				if (isMobile && !isApple && modelViewer.canActivateAR) {
+					// Android / WebXR path — prompt user to tap AR button.
+					setTimeout(() => { arPrompt.style.display = "flex"; }, 900);
 				}
+				// On iOS, model-viewer renders its own native Quick Look button
+				// automatically when ios-src is set — no custom button needed.
 			});
 
 			modelViewer.addEventListener("error", () => {
-				loading.innerHTML = "Failed to load model";
+				statusText.textContent = "Failed to load model.";
 			});
 
 			modelViewer.addEventListener("ar-status", (event) => {
@@ -162,15 +215,6 @@
 		}
 
 		loadModel();
-
-		// Touch fallback: try AR on first touch (non-iOS only, iOS uses QuickLook natively)
-		let hasTriedAR = false;
-		document.addEventListener("touchstart", () => {
-			if (!hasTriedAR && !isAppleDevice() && modelViewer.canActivateAR && isMobileDevice()) {
-				hasTriedAR = true;
-				setTimeout(activateAR, 500);
-			}
-		});
 	</script>
 </body>
 </html>
