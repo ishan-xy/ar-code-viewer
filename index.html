@@ -124,9 +124,6 @@
 		// Strip the leading slash to get the query token, e.g. "ab3c9x"
 		const query = location.pathname.slice(1);
 
-		// The AR viewer is deployed separately from the Go backend.
-		// BASE_URL is injected by server.js at runtime via a placeholder replacement,
-		// so this file never needs to be manually edited when the backend URL changes.
 		const baseUrl = "%%BASE_URL%%";
 
 		const modelViewer = document.getElementById("modelViewer");
