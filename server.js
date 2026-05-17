@@ -27,5 +27,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
-    console.log(`Visit http://localhost:${PORT}/_nshai95ye to test`);
+    console.log(`Visit http://localhost:${PORT}/ to test`);
 });
