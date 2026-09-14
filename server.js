@@ -7,7 +7,7 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 5511;
 
-const BASE_URL = process.env.BASE_URL.replace(/\/$/, '');
+const BASE_URL = (process.env.BASE_URL || "http://127.0.0.1:8080").replace(/\/$/, '');
 
 const htmlTemplate = fs.readFileSync(
   path.join(__dirname, 'index.html'),
