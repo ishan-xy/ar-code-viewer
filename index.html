@@ -124,7 +124,19 @@
 		// Strip the leading slash to get the query token, e.g. "ab3c9x"
 		const query = location.pathname.slice(1);
 
-		const baseUrl = "%%BASE_URL%%";
+		let baseUrl = "%%BASE_URL%%";
+		// If served statically (e.g. on Vercel/Netlify) where %%BASE_URL%% was not replaced,
+		// automatically resolve the backend API based on current domain:
+		if (baseUrl.includes("%%BASE_URL%%") || !baseUrl) {
+			const host = window.location.hostname;
+			if (host.startsWith("dev-") || host.includes("dev")) {
+				baseUrl = "https://dev-api.gamchngr.xyz";
+			} else if (host === "localhost" || host === "127.0.0.1") {
+				baseUrl = "http://127.0.0.1:8080";
+			} else {
+				baseUrl = "https://api.gamchngr.xyz";
+			}
+		}
 
 		const modelViewer = document.getElementById("modelViewer");
 		const statusText  = document.getElementById("statusText");
